@@ -1,10 +1,10 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import crud, models, schemas
+from app import crud, schemas
 from app.database import Base, engine, get_db
-
 
 app = FastAPI(
     title="URL Shortener API",
@@ -77,3 +77,25 @@ def shorten_url(
             f"{url.short_code}"
         )
     }
+
+
+@app.get("/{short_code}")
+def redirect_to_original_url(
+    short_code: str,
+    db: Session = Depends(get_db)
+):
+    url = crud.get_url_by_short_code(
+        db,
+        short_code
+    )
+
+    if not url:
+        raise HTTPException(
+            status_code=404,
+            detail="Short URL not found"
+        )
+
+    return RedirectResponse(
+        url=url.original_url,
+        status_code=307
+    )
