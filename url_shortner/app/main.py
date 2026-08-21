@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy import text
@@ -6,8 +8,23 @@ from sqlalchemy.orm import Session
 from app import crud, schemas
 from app.database import Base, engine, get_db
 
+
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
+
+
 app = FastAPI(
     title="URL Shortener API",
+    description="""
+A simple URL shortening API built with FastAPI and PostgreSQL.
+
+### Features
+
+* Create shortened URLs
+* Redirect short URLs to their original destination
+* Prevent duplicate shortened URLs for the same original URL
+* PostgreSQL database integration
+* Database health check endpoint
+""",
     version="1.0.0"
 )
 
@@ -15,14 +32,22 @@ app = FastAPI(
 Base.metadata.create_all(bind=engine)
 
 
-@app.get("/")
+@app.get(
+    "/",
+    summary="API status",
+    tags=["General"]
+)
 def read_root():
     return {
         "message": "URL Shortener API is running"
     }
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    summary="Check API and database health",
+    tags=["General"]
+)
 def health_check():
     try:
         with engine.connect() as connection:
@@ -43,8 +68,11 @@ def health_check():
 @app.post(
     "/shorten",
     response_model=schemas.URLResponse,
-    status_code=201
+    status_code=201,
+    summary="Create a shortened URL",
+    tags=["URL Shortening"]
 )
+
 def shorten_url(
     url_data: schemas.URLCreate,
     db: Session = Depends(get_db)
@@ -56,15 +84,15 @@ def shorten_url(
         original_url
     )
 
+    # Return the existing short URL if the original URL
+    # has already been shortened.
     if existing_url:
         return {
             "original_url": existing_url.original_url,
-            "short_url": (
-                f"http://127.0.0.1:8000/"
-                f"{existing_url.short_code}"
-            )
+            "short_url": f"{BASE_URL}/{existing_url.short_code}"
         }
 
+    # Create a new short URL.
     url = crud.create_short_url(
         db,
         original_url
@@ -72,14 +100,16 @@ def shorten_url(
 
     return {
         "original_url": url.original_url,
-        "short_url": (
-            f"http://127.0.0.1:8000/"
-            f"{url.short_code}"
-        )
+        "short_url": f"{BASE_URL}/{url.short_code}"
     }
 
 
-@app.get("/{short_code}")
+@app.get(
+    "/{short_code}",
+    summary="Redirect to the original URL",
+    tags=["URL Shortening"]
+)
+
 def redirect_to_original_url(
     short_code: str,
     db: Session = Depends(get_db)
